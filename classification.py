@@ -94,8 +94,7 @@ class Classification():
         """
         tuned_parameters = [{'kernel': ['rbf'], 'gamma': np.logspace(-4, -2, 10),
                              'C': np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]},
-                            {'kernel': ['linear'], 'gamma': np.logspace(-4, -2, 10),
-                             'C': np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]}]
+                            {'kernel': ['linear'], 'C': np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]}]
 
         cv = StratifiedKFold(self.train_label, n_folds=n, shuffle=True)
         clf = GridSearchCV(SVC(probability=True, class_weight='balanced', decision_function_shape='ovr'),
