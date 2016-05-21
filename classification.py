@@ -195,6 +195,39 @@ class Classification():
         pred = clf.predict(self.test)
         print(classification_report(self.test_label, pred))
 
+    def draw_learning_curve(self):
+        """http://aidiary.hatenablog.com/entry/20150826/1440596779"""
+        train_sizes, train_scores, test_scores = learning_curve(self.clf, self.train, self.train_label, cv=10,
+                                                                scoring="mean_squared_error",
+                                                                train_sizes=np.linspace(0.5, 1.0, 10))
+        plt.plot(train_sizes, train_scores.mean(axis=1), label="training scores")
+        plt.plot(train_sizes, test_scores.mean(axis=1), label="test scores")
+        plt.legend(loc="best")
+        plt.show()
+
+    def draw_roc_curve(self):
+
+        train, test, train_label, test_label = train_test_split(self.train, self.train_label)
+        clf = self.bestclf
+        probas_ = clf.fit(train, train_label).predict_proba(test)
+
+        # Compute ROC curve and area the curve
+        fpr, tpr, thresholds = roc_curve(test_label, probas_[:, 1])
+        roc_auc = auc(fpr, tpr)
+        print("Area under the ROC curve :", roc_auc)
+
+        # Plot ROC curve
+        plt.clf()
+        plt.plot(fpr, tpr, label='ROC curve (area = %0.2f)' % roc_auc)
+        plt.plot([0, 1], [0, 1], 'k--')
+        plt.xlim([0.0, 1.0])
+        plt.ylim([0.0, 1.0])
+        plt.xlabel('False Positive Rate')
+        plt.ylabel('True Positive Rate')
+        plt.title('Receiver operating characteristic example')
+        plt.legend(loc="lower right")
+        plt.show()
+
 
 def report_classification(train: np.ndarray, train_label: np.ndarray, name: str = 'result_classification'):
     """
