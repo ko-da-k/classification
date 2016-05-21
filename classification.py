@@ -6,6 +6,7 @@ scikit-learnの機械学習でよく使われるものを関数化
 """
 
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.cross_validation import train_test_split, StratifiedKFold
@@ -31,20 +32,6 @@ def sort_smart(lists: list):
         return smart(lists)
     except:
         return sorted(lists)
-
-
-def plot_confusion_matrix(cm: np.ndarray, genre_list: list):
-    plt.clf()
-    plt.matshow(cm, fignum=False, cmap="Blues", vmin=0, vmax=1.0)
-    plt.xticks(list(range(len(genre_list))), genre_list, rotation=90, verticalalignment='bottom')
-    plt.yticks(list(range(len(genre_list))), genre_list)
-    plt.title("confusion_matrix")
-    plt.colorbar()
-    plt.grid(False)
-    plt.xlabel("Predicted class")
-    plt.ylabel("True class")
-    plt.grid(False)
-    plt.show()
 
 
 class Classification():
@@ -88,13 +75,19 @@ class Classification():
     def set_classifier(self, clf):
         self.clf = clf
 
-    def svm_gridsearch(self, n: int = 5):
+    def svm_gridsearch(self, n: int = 5,
+                       C_range: np.ndarray = np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)],
+                       gamma_range: np.ndarray = np.logspace(-4, -2, 10)):
         """
-        :param n: 交差検定の交差数
+        gridsearchを行う関数
+        :param n: 交差数
+        :param C_range: Cパラメータの範囲
+        :param gamma_range: gammaパラメータの範囲
+        :return:
         """
-        tuned_parameters = [{'kernel': ['rbf'], 'gamma': np.logspace(-4, -2, 10),
-                             'C': np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]},
-                            {'kernel': ['linear'], 'C': np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]}]
+        tuned_parameters = [{'kernel': ['rbf'], 'gamma': gamma_range,
+                             'C': C_range},
+                            {'kernel': ['linear'], 'C': C_range}]
 
         cv = StratifiedKFold(self.train_label, n_folds=n, shuffle=True)
         clf = GridSearchCV(SVC(probability=True, class_weight='balanced', decision_function_shape='ovr'),
@@ -102,27 +95,54 @@ class Classification():
 
         print("grid search...")
         clf.fit(self.train, self.train_label)
-        print(clf.best_estimator_)
         self.clf = clf.best_estimator_
         self.bestclf = clf.best_estimator_
+        scores = [x[1] for x in clf.grid_scores_[:len(C_range) * len(gamma_range)]]
+        scores = np.array(scores).reshape(len(C_range), len(gamma_range))
+        self.scores = pd.DataFrame(scores, index=C_range, columns=gamma_range)
+        self.scores.index.name = "C"
+        self.scores.columns.name = "gamma"
+        sns.heatmap(self.scores, annot=True, cmap="Blues")
+        sns.plt.show()
+        scores = [x[1] for x in clf.grid_scores_[len(C_range) * len(gamma_range):]]
+        plt.plot(C_range, scores)
+        plt.xlabel("C")
+        plt.ylabel("accuracy")
+        plt.show()
+        print(clf.best_estimator_)
         print("set classifier")
 
-    def lr_gridsearch(self, n: int = 5):
+    def lr_gridsearch(self, n: int = 5, C_range: np.ndarray = np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)]):
         """
-        :param n: 交差検定の交差数
+        ロジスティック回帰分類のgridsearch
+        パラメータは、lpfgs法の場合(多クラス分類に使用)はl2ノルムしか取れない
+        :param n: 交差数
+        :param C_range: Cパラメータの範囲
+        :return:
+        """
+        parameters = {'penalty': ["l2"],
+                      'C': C_range,
+                      'class_weight': [None, "balanced"]}
         """
         parameters = {'penalty': ["l1", "l2"],
-                      'C': np.r_[np.logspace(0, 2, 50), np.logspace(2, 3, 50)],
-                      'class_weight': [None, "auto"]}
-
+                      'C': C_range,
+                      'class_weight': [None, "balanced"]}
+        """
         cv = StratifiedKFold(self.train_label, n_folds=n, shuffle=True)
         clf = GridSearchCV(LogisticRegression(multi_class='multinomial', solver='lbfgs'), parameters, cv=cv, n_jobs=-1)
 
         print("grid search...")
         clf.fit(self.train, self.train_label)
-        print(clf.best_estimator_)
         self.clf = clf.best_estimator_
         self.bestclf = clf.best_estimator_
+        scores = [x[1] for x in clf.grid_scores_]
+        scores = np.array(scores).reshape(len(C_range), 2)
+        self.scores = pd.DataFrame(scores, index=C_range, columns=parameters["class_weight"])
+        self.scores.index.name = "C"
+        self.scores.columns.name = "class_weight"
+        sns.heatmap(self.scores, annot=True, cmap="Blues")
+        sns.plt.show()
+        print(clf.best_estimator_)
         print("set classifier")
 
     def cv(self, k: int = 5):
@@ -130,12 +150,12 @@ class Classification():
         交差検定を行う
         :param k: 交差数
         """
-        self.key = sort_smart(sorted(list(set(self.train_label))))
-        self.conf_mat = np.zeros((len(self.key), len(self.key)))
+        self.key = sort_smart(list(set(self.train_label)))
+        conf_mat = np.zeros((len(self.key), len(self.key)))
         self.miss = []
 
-        self.merge_true = np.array([])
-        self.merge_pred = np.array([])
+        merge_true = np.array([])
+        merge_pred = np.array([])
 
         cv = StratifiedKFold(self.train_label, n_folds=k, shuffle=True)
 
@@ -152,25 +172,28 @@ class Classification():
                 if cv_testlabel[i] != cv_pred[i]:
                     self.miss.append([test_index[i], cv_testlabel[i], cv_pred[i]])
 
-            self.merge_true = np.hstack([self.merge_true, cv_testlabel])
-            self.merge_pred = np.hstack([self.merge_pred, cv_pred])
+            merge_true = np.hstack([merge_true, cv_testlabel])
+            merge_pred = np.hstack([merge_pred, cv_pred])
             # print classification_report(cv_testlabel,cv_pred)
             cm = confusion_matrix(cv_testlabel, cv_pred, self.key)
-            self.conf_mat = self.conf_mat + cm
+            conf_mat = conf_mat + cm
         # scores = cross_validation.cross_val_score(self.clf,self.train,self.train_label,cv=cv)
         # print "\nAccuracy: %0.2f (+/- %0.2f)" % (scores.mean(),scores.std() * 2)
         print('\nfinal classification report\n')
-        print('accuracy score:', accuracy_score(self.merge_true, self.merge_pred), '\n')
-        print(classification_report(self.merge_true, self.merge_pred, labels=self.key))
-        self.conf_mat = np.array([list(c / float(sum(c))) for c in self.conf_mat])
-        plot_confusion_matrix(self.conf_mat, self.key)
+        print('accuracy score:', accuracy_score(merge_true, merge_pred), '\n')
+        print(classification_report(merge_true, merge_pred, labels=self.key))
+        conf_mat = np.array([list(c / float(sum(c))) for c in conf_mat])
+        self.conf_mat = pd.DataFrame(conf_mat, index=self.key, columns=self.key)
+        self.conf_mat.index.name = "True class"
+        self.conf_mat.columns.name = "Predict class"
+        sns.heatmap(self.conf_mat, annot=True, cmap="Blues", vmax=1.0, vmin=0.0)
         self.miss.sort(key=lambda x: x[0])
+        self.miss = pd.DataFrame(self.miss, columns=["index", "True_label", "Pred_label"])
 
     def prediction(self):
-        self.clf.fit(self.train, self.train_label)
-        pred = self.clf.predict(test)
-        print(classification_report(test_label, pred))
-        plot_confusion_matrix(confusion_matrix(test_label, pred), key)
+        clf = self.clf.fit(self.train, self.train_label)
+        pred = clf.predict(self.test)
+        print(classification_report(self.test_label, pred))
 
 
 def report_classification(train: np.ndarray, train_label: np.ndarray, name: str = 'result_classification'):
