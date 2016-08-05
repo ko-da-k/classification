@@ -10,28 +10,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.svm import SVC
 from sklearn.cross_validation import train_test_split, StratifiedKFold
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, roc_curve, auc
 from sklearn.grid_search import GridSearchCV
 from sklearn.linear_model import LogisticRegression
+from sklearn.learning_curve import learning_curve
 import seaborn as sns
+from tools import sort_smart
 
 
 # from malss import MALSS
 
-
-def smart(lists: list):
-    """A1 A10 A2みたいなものをスマートに並び替える"""
-    convert = lambda text: int(text) if text.isdigit() else text
-    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
-    lists.sort(key=alphanum_key)
-    return lists
-
-
-def sort_smart(lists: list):
-    try:
-        return smart(lists)
-    except:
-        return sorted(lists)
 
 
 class Classification():
@@ -77,12 +65,14 @@ class Classification():
 
     def svm_gridsearch(self, n: int = 5,
                        C_range: np.ndarray = np.r_[np.logspace(0, 2, 10), np.logspace(2, 3, 10)],
-                       gamma_range: np.ndarray = np.logspace(-4, -2, 10)):
+                       gamma_range: np.ndarray = np.logspace(-4, -2, 10),
+                       plot: bool = False):
         """
         gridsearchを行う関数
         :param n: 交差数
         :param C_range: Cパラメータの範囲
         :param gamma_range: gammaパラメータの範囲
+        :param plot: 可視化するかしないか
         :return:
         """
         tuned_parameters = [{'kernel': ['rbf'], 'gamma': gamma_range,
@@ -95,20 +85,25 @@ class Classification():
 
         print("grid search...")
         clf.fit(self.train, self.train_label)
+
         self.clf = clf.best_estimator_
         self.bestclf = clf.best_estimator_
+
         scores = [x[1] for x in clf.grid_scores_[:len(C_range) * len(gamma_range)]]
         scores = np.array(scores).reshape(len(C_range), len(gamma_range))
-        self.scores = pd.DataFrame(scores, index=C_range, columns=gamma_range)
-        self.scores.index.name = "C"
-        self.scores.columns.name = "gamma"
-        sns.heatmap(self.scores, annot=True, cmap="Blues")
-        sns.plt.show()
-        scores = [x[1] for x in clf.grid_scores_[len(C_range) * len(gamma_range):]]
-        plt.plot(C_range, scores)
-        plt.xlabel("C")
-        plt.ylabel("accuracy")
-        plt.show()
+        self.rbf_scores = pd.DataFrame(scores, index=C_range, columns=gamma_range)
+        self.rbf_scores.index.name = "C"
+        self.rbf_scores.columns.name = "gamma"
+        self.linear_scores = [x[1] for x in clf.grid_scores_[len(C_range) * len(gamma_range):]]
+
+        if plot:
+            sns.heatmap(self.rbf_scores, annot=True, cmap="Blues")
+            sns.plt.show()
+            plt.plot(C_range, self.linear_scores)
+            plt.xlabel("C")
+            plt.ylabel("accuracy")
+            plt.show()
+
         print(clf.best_estimator_)
         print("set classifier")
 
@@ -145,13 +140,14 @@ class Classification():
         print(clf.best_estimator_)
         print("set classifier")
 
-    def cv(self, k: int = 5):
+    def cv(self, k: int = 5, plot: bool = False):
         """
         交差検定を行う
         :param k: 交差数
+        :param plot: 可視化するかしないか
         """
         self.key = sort_smart(list(set(self.train_label)))
-        conf_mat = np.zeros((len(self.key), len(self.key)))
+        self.conf_mat = np.zeros((len(self.key), len(self.key)))
         self.miss = []
 
         merge_true = np.array([])
@@ -176,19 +172,21 @@ class Classification():
             merge_pred = np.hstack([merge_pred, cv_pred])
             # print classification_report(cv_testlabel,cv_pred)
             cm = confusion_matrix(cv_testlabel, cv_pred, self.key)
-            conf_mat = conf_mat + cm
-        # scores = cross_validation.cross_val_score(self.clf,self.train,self.train_label,cv=cv)
-        # print "\nAccuracy: %0.2f (+/- %0.2f)" % (scores.mean(),scores.std() * 2)
+            self.conf_mat = self.conf_mat + cm
+
         print('\nfinal classification report\n')
         print('accuracy score:', accuracy_score(merge_true, merge_pred), '\n')
         print(classification_report(merge_true, merge_pred, labels=self.key))
-        conf_mat = np.array([list(c / float(sum(c))) for c in conf_mat])
-        self.conf_mat = pd.DataFrame(conf_mat, index=self.key, columns=self.key)
-        self.conf_mat.index.name = "True class"
-        self.conf_mat.columns.name = "Predict class"
-        sns.heatmap(self.conf_mat, annot=True, cmap="Blues", vmax=1.0, vmin=0.0)
+        if plot:
+            recall_mat = np.array([list(c / float(sum(c))) for c in self.conf_mat])
+            recall_mat = pd.DataFrame(recall_mat, index=self.key, columns=self.key)
+            recall_mat.index.name = "True class"
+            recall_mat.columns.name = "Predict class"
+            sns.heatmap(recall_mat, annot=True, cmap="Blues", vmax=1.0, vmin=0.0)
+            sns.plt.show()
         self.miss.sort(key=lambda x: x[0])
         self.miss = pd.DataFrame(self.miss, columns=["index", "True_label", "Pred_label"])
+        print(self.conf_mat)
 
     def prediction(self):
         clf = self.clf.fit(self.train, self.train_label)
@@ -227,15 +225,3 @@ class Classification():
         plt.title('Receiver operating characteristic example')
         plt.legend(loc="lower right")
         plt.show()
-
-
-def report_classification(train: np.ndarray, train_label: np.ndarray, name: str = 'result_classification'):
-    """
-    MALSSというツール
-    http://qiita.com/canard0328/items/5da95ff4f2e1611f87e1
-    :param name: ファイル名
-    :param train_label: 正解ラベル
-    :param train: 学習データ
-    """
-    cls = MALSS('classification', standardize=False, n_jobs=-1, random_state=0, lang='jp')
-    cls.fit(train, train_label, name)
