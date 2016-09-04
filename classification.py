@@ -15,11 +15,22 @@ from sklearn.grid_search import GridSearchCV
 from sklearn.linear_model import LogisticRegression
 from sklearn.learning_curve import learning_curve
 import seaborn as sns
-from tools import sort_smart
 
 
 # from malss import MALSS
+def smart(lists: list):
+    """A1 A10 A2みたいなものをスマートに並び替える"""
+    convert = lambda text: int(text) if text.isdigit() else text
+    alphanum_key = lambda key: [convert(c) for c in re.split('([0-9]+)', key)]
+    lists.sort(key=alphanum_key)
+    return lists
 
+
+def sort_smart(lists: list):
+    try:
+        return smart(lists)
+    except:
+        return sorted(lists)
 
 
 class Classification():
@@ -177,14 +188,7 @@ class Classification():
         print('\nfinal classification report\n')
         print('accuracy score:', accuracy_score(merge_true, merge_pred), '\n')
         print(classification_report(merge_true, merge_pred, labels=self.key))
-<<<<<<< HEAD
-        conf_mat = np.array([list(c / float(sum(c))) for c in conf_mat])
-        self.conf_mat = pd.DataFrame(conf_mat, index=self.key, columns=self.key)
-        self.conf_mat.index.name = "True class"
-        self.conf_mat.columns.name = "Predict class"
-        sns.heatmap(self.conf_mat, annot=True, cmap="Blues", vmax=1.0, vmin=0.0)
-        sns.plt.show()
-=======
+
         if plot:
             recall_mat = np.array([list(c / float(sum(c))) for c in self.conf_mat])
             recall_mat = pd.DataFrame(recall_mat, index=self.key, columns=self.key)
@@ -192,7 +196,7 @@ class Classification():
             recall_mat.columns.name = "Predict class"
             sns.heatmap(recall_mat, annot=True, cmap="Blues", vmax=1.0, vmin=0.0)
             sns.plt.show()
->>>>>>> 671559296a71cddc3143f03454e01e9e34f5cdb8
+
         self.miss.sort(key=lambda x: x[0])
         self.miss = pd.DataFrame(self.miss, columns=["index", "True_label", "Pred_label"])
         print(self.conf_mat)
@@ -211,36 +215,8 @@ class Classification():
         plt.plot(train_sizes, test_scores.mean(axis=1), label="test scores")
         plt.legend(loc="best")
         plt.show()
-<<<<<<< HEAD
 
     def draw_roc_curve(self):
-
-        train, test, train_label, test_label = train_test_split(self.train, self.train_label)
-        clf = self.bestclf
-        probas_ = clf.fit(train, train_label).predict_proba(test)
-
-        # Compute ROC curve and area the curve
-        fpr, tpr, thresholds = roc_curve(test_label, probas_[:, 1])
-        roc_auc = auc(fpr, tpr)
-        print("Area under the ROC curve :", roc_auc)
-
-        # Plot ROC curve
-        plt.clf()
-        plt.plot(fpr, tpr, label='ROC curve (area = %0.2f)' % roc_auc)
-        plt.plot([0, 1], [0, 1], 'k--')
-        plt.xlim([0.0, 1.0])
-        plt.ylim([0.0, 1.0])
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver operating characteristic example')
-        plt.legend(loc="lower right")
-        plt.show()
-
-=======
->>>>>>> 671559296a71cddc3143f03454e01e9e34f5cdb8
-
-    def draw_roc_curve(self):
-
         train, test, train_label, test_label = train_test_split(self.train, self.train_label)
         clf = self.bestclf
         probas_ = clf.fit(train, train_label).predict_proba(test)
